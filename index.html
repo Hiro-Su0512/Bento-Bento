@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>お弁当献立アシスタント</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font Awesome -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+  />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- importmap -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react/": "https://esm.sh/react@^19.2.3/",
+      "react": "https://esm.sh/react@^19.2.3",
+      "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+      "@google/genai": "https://esm.sh/@google/genai@^1.37.0"
+    }
+  }
+  </script>
+</head>
+
+<body class="bg-orange-50 min-h-screen p-4">
+
+  <div class="max-w-2xl mx-auto bg-white rounded-xl shadow p-6">
+    <h1 class="text-2xl font-bold text-orange-600 mb-4">
+      🍱 お弁当献立アシスタント
+    </h1>
+
+    <p class="text-sm text-gray-600 mb-3">
+      食材や条件を入力すると、AIが平日5日分のお弁当献立を提案します。
+    </p>
+
+    <textarea
+      id="prompt"
+      class="w-full h-32 p-3 border rounded mb-4"
+      placeholder="例：仕事が忙しい。祖父母から野菜が届く予定。平日5日分のお弁当献立を考えてください。"
+    ></textarea>
+
+    <button
+      onclick="sendPrompt()"
+      class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded"
+    >
+      献立を作る
+    </button>
+
+    <pre
+      id="result"
+      class="mt-6 whitespace-pre-wrap bg-gray-100 p-4 rounded text-sm"
+    ></pre>
+  </div>
+
+  <script>
+    async function sendPrompt() {
+      const prompt = document.getElementById("prompt").value;
+      const resultArea = document.getElementById("result");
+      resultArea.textContent = "生成中…";
+
+      try {
+        const response = await fetch(
+          "https://bento-api.example.com/generate",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              prompt: prompt
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        resultArea.textContent =
+          data.text ||
+          data.candidates?.[0]?.content?.parts?.[0]?.text ||
+          JSON.stringify(data, null, 2);
+
+      } catch (error) {
+        resultArea.textContent = "エラーが発生しました：" + error;
+      }
+    }
+
+    // Service Worker（PWA）
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/service-worker.js");
+    }
+  </script>
+
+</body>
+</html>
