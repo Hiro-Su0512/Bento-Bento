@@ -1,0 +1,7 @@
+{
+  "name": "お弁当献立アシスタント (Bento Bento)",
+  "description": "忙しいお母さんのための平日お弁当献立作成ツール。祖父母からの野菜を優先消費し、時短・彩り・作り置きを考慮した献立を提案します。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
