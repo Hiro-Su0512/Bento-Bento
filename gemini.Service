@@ -1,0 +1,137 @@
+
+import { GoogleGenAI, Type } from "@google/genai";
+import { Mode, ApiResponse } from "../types";
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
+const SYSTEM_PROMPT = `あなたは「仕事をしていて忙しいお母さん向けの弁当献立アシスタント」です。
+【基本ルール】
+・平日のお弁当向けの献立を考える
+・冷めても美味しいこと
+・汁気が少ないこと
+・作り置き、下味冷凍が可能な料理を優先する
+・調理時間は短め（10〜15分以内が理想）
+・彩り（茶色ばかりにならない）を考慮する
+・同じ料理が続かないようにする
+・1日分（または1つの献立案）につき、主菜(Main)を2つ、副菜(Side)を3つの計5品を提案してください。
+・各料理には、参考になるレシピのURL（クックパッドや楽天レシピ、またはGoogle検索URLなど）を必ず含めてください。
+・各献立には「こんな感じのお弁当になります」という一言ポイント（例：彩り華やか時短弁当、ガッツリお肉のスタミナ弁当など）を必ず添えてください。
+
+【家庭事情】
+・週に1回まとめ買いをする
+・祖父母の家から野菜が宅配で届くことが多い
+・祖父母から届いた野菜は傷みやすいため優先的に消費する
+・食材入力が空の場合は、買い物前の計画モードとして、栄養バランスと彩りを考慮した「おすすめの5日間定番メニュー」を提案し、必要な買い物リストも作成してください。`;
+
+export const generateBentoMenu = async (
+  mode: Mode,
+  ingredients: string,
+  grandma_vegetables: string,
+  usual_ingredients: string
+): Promise<ApiResponse> => {
+  const modelName = 'gemini-3-flash-preview';
+  
+  const prompt = `
+    mode: ${mode}
+    ingredients: ${ingredients || "（未入力：買い物前のおすすめ提案をお願いします）"}
+    grandma_vegetables: ${grandma_vegetables || "（未入力）"}
+    usual_ingredients: ${usual_ingredients}
+    
+    必ず日本語で出力してください。
+    1つの献立につき、主菜2品、副菜3品を提案し、それぞれのレシピURLと、お弁当のポイント（一言）を付けてください。
+  `;
+
+  const itemSchema = {
+    type: Type.OBJECT,
+    properties: {
+      name: { type: Type.STRING },
+      recipeUrl: { type: Type.STRING, description: "料理の作り方がわかるURL" }
+    },
+    required: ["name", "recipeUrl"]
+  };
+
+  const responseSchema = mode === 'week' ? {
+    type: Type.OBJECT,
+    properties: {
+      weekData: {
+        type: Type.OBJECT,
+        properties: {
+          days: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                day: { type: Type.STRING },
+                mains: { type: Type.ARRAY, items: itemSchema, description: "主菜2品" },
+                sides: { type: Type.ARRAY, items: itemSchema, description: "副菜3品" },
+                point: { type: Type.STRING, description: "お弁当のポイント一言" }
+              },
+              required: ["day", "mains", "sides", "point"]
+            }
+          },
+          prepList: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          },
+          shoppingList: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          }
+        },
+        required: ["days", "prepList"]
+      }
+    }
+  } : {
+    type: Type.OBJECT,
+    properties: {
+      fiveData: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            mains: { type: Type.ARRAY, items: itemSchema },
+            sides: { type: Type.ARRAY, items: itemSchema },
+            description: { type: Type.STRING },
+            point: { type: Type.STRING },
+            makeAhead: { type: Type.STRING, enum: ["可", "不可"] }
+          },
+          required: ["name", "mains", "sides", "description", "point", "makeAhead"]
+        }
+      }
+    }
+  };
+
+  const response = await ai.models.generateContent({
+    model: modelName,
+    contents: prompt,
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      responseSchema: responseSchema
+    },
+  });
+
+  const text = response.text;
+  return JSON.parse(text || '{}') as ApiResponse;
+};
+
+export const analyzeImage = async (base64: string, mimeType: string, type: 'receipt' | 'food'): Promise<string> => {
+  const modelName = 'gemini-3-flash-preview';
+  
+  const prompt = type === 'receipt' 
+    ? "このレシートから食品の名前と分量のみを抽出し、カンマ区切りのリストにしてください。余計な説明は不要です。" 
+    : "この画像に写っている食材（野菜、肉、魚、果物など）をすべて特定し、カンマ区切りのリストにしてください。余計な説明は不要です。";
+
+  const response = await ai.models.generateContent({
+    model: modelName,
+    contents: {
+      parts: [
+        { inlineData: { data: base64, mimeType } },
+        { text: prompt }
+      ]
+    }
+  });
+
+  return response.text || '';
+};
